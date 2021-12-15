@@ -2,7 +2,6 @@
 Augmented Reality companion to Laurence Payout's 'The Bleach Packers'
 More at Laurence's [website](http://www.laurencepayot.com/category/the-bleach-packers/).
 
-
 This project displays a model and accompanying sound file at lat, lon and height.
 
 ## Models
