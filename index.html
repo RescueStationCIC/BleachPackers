@@ -105,12 +105,33 @@
 });
 </script>
 
+<script>
+  AFRAME.registerComponent('opacitychanger', {
+  init: function () {
+    var params = window.reallyHackyGlobalLocation;
+    if(params.alt != null){
+      
+      
+      this.el.object3D.traverse((child) => {
+        if (child.type === 'Mesh') {
+          const material = child.material;
+          // Do stuff with the material
+          material.opacity = 0.1;
+        }
+      })
+
+    }else{
+      console.log("no position found.");
+    }
+  }
+});
+</script>
 
 
 </head>
 <body style="margin: 0; overflow: hidden;">
   <a-scene 
-    fog="type: linear; color: #AAA" 
+    fog="type: exponential; color: #AAA; density: 0.0005" 
     renderer="logarithmicDepthBuffer: true;"
     embedded 
     loading-screen="enabled: true;" 
@@ -125,10 +146,11 @@
   
       gltf-model="#model-asset"
       scalechanger
-      positionchanger 
+      positionchanger
+      opacitychanger 
       scale="1 1 1" 
       position="0 0 0" 
-      rotation="0 0 0">
+      rotation="0 270 0">
     </a-entity>
 
     <a-camera gps-projected-camera read-rotation></a-camera>
