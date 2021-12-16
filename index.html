@@ -4,20 +4,18 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js" ></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js" ></script>
   
   <script>
-  
-    window.onload = function() {
+
+    function processParams(){
       try {
         //failure can be exception, or null
         console.log("Checking for params");
         const urlParams = new URLSearchParams(window.location.search);
 
         var simulate = urlParams.get('simulate')=='true';
-
-
 
         console.log(`simulate: ${simulate}`);
 
@@ -33,24 +31,34 @@
         var params = {
           lat: parseFloat(urlParams.get('lat')),
           lon: parseFloat(urlParams.get('lon')),
-          alt: parseFloat(urlParams.get('alt'))
+          alt: parseFloat(urlParams.get('alt')),
+          scale: parseFloat(urlParams.get('scale')),
         };
       }
+      params.simulate = simulate;
 
       console.log("using the following params:");
       console.log(params);
+      return params;
+    }
 
+    //THANKYOU: https://stackoverflow.com/a/61443888
+    function changeReadOnlyLocations(params){
       var sceneEl = document.querySelector('a-scene');
+      var el = sceneEl.querySelector("#model");
 
-      console.log("adding location to scene");
+      console.log("processing location");
+
       if (params.lon != null && params.lon != null) {
         var loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
+        
         console.log(`substituting coordinates: ${loc}`);
         var gps = document.createAttribute("gps-projected-entity-place");
         gps.value  = loc;
-        sceneEl.setAttributeNode(gps);
+        el.setAttributeNode(gps);
 
-        if(simulate){
+        if(params.simulate){
+          console.log('simulating location');
           var cameraEl = sceneEl.querySelector('a-camera');
           cameraEl.setAttribute('simulateLatitude', params.lat);
           cameraEl.setAttribute('simulateLongitude', params.lon);
@@ -59,20 +67,44 @@
       } else {
         console.log("No coordinates found.");
       }
-
-      console.log(`substituting altitude: ${params.alt}`);
-      var containerEls = sceneEl.querySelectorAll(".scene-container");
-
-      containerEls.forEach(function (el) {
-        var pos = el.getAttribute("position");
-
-        pos.y = pos.y + params.alt;
-        console.log(pos);
-
-        el.setAttribute("position", pos);
-      });
     }
+
+    window.onload = function() {
+      var params = processParams();
+      changeReadOnlyLocations(params);
+      window.reallyHackyGlobalLocation = params;
+    }
+
 </script>
+
+<script>
+  AFRAME.registerComponent('scalechanger', {
+  init: function () {
+    var params = window.reallyHackyGlobalLocation;
+    
+    if(params.scale != null){
+      this.el.setAttribute('scale',{x:params.scale, y:params.scale, z:params.scale});
+      }else{
+        console.log("no scale found.");
+      }
+  }
+});
+</script>
+
+<script>
+  AFRAME.registerComponent('positionchanger', {
+  init: function () {
+    var params = window.reallyHackyGlobalLocation;
+    if(params.alt != null){
+      var pos = this.el.getAttribute('position');
+      this.el.setAttribute('position',{x:pos.x, y:params.alt, z:pos.z});
+      }else{
+        console.log("no position found.");
+      }
+  }
+});
+</script>
+
 
 
 </head>
@@ -83,28 +115,20 @@
     embedded 
     loading-screen="enabled: true;" 
     arjs="sourceType: webcam; debugUIEnabled: false;">
-    <a-assets>
+    <a-assets  timeout="10000">
       <a-asset-item id="model-asset" src="./assets/model.glb" />
       <a-asset-item id="sound-asset" src="./assets/market.mp3"></a-asset-item>
     </a-assets>
 
     <a-entity 
-      class="scene-container" 
+      id="model"
       sound="src: #sound-asset; autoplay=true"
-      geometry="primitive: box; width: 4; height: 8 ; depth: 2"
-      material="shader: flat; color: red; transparent: true; opacity: 0.0" 
-      position="0 2 -5" 
+      gltf-model="#model-asset"
+      scalechanger
+      positionchanger 
+      scale="1 1 1" 
+      position="0 0 0" 
       rotation="0 0 0">
-
-      <a-entity 
-        id="model"
-        gltf-model="#model-asset" 
-        scale="1 1 1" 
-        position="0 0 0" 
-        rotation="0 0 0">
-      </a-entity>
-
-
     </a-entity>
 
     <a-camera gps-projected-camera read-rotation><a-cursor></a-cursor></a-camera>
