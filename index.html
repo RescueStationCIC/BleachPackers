@@ -83,12 +83,12 @@
   AFRAME.registerComponent('scalechanger', {
   init: function () {
     var params = window.reallyHackyGlobalLocation;
+    var scale = params.scale;
+    if(isNaN(scale)){
+      scale = 1; //default
+    }
+    this.el.setAttribute('scale',{x:scale, y:scale, z:scale}, true);
     
-    if(!isNaN(params.scale)){
-      this.el.setAttribute('scale',{x:params.scale, y:params.scale, z:params.scale}, true);
-      }else{
-        console.log("no scale found.");
-      }
   }
 });
 </script>
@@ -97,12 +97,13 @@
   AFRAME.registerComponent('positionchanger', {
   init: function () {
     var params = window.reallyHackyGlobalLocation;
-    if(!isNaN(params.alt)){
-      var pos = this.el.getAttribute('position');
-      this.el.setAttribute('position',{x:pos.x, y:params.alt, z:pos.z},true);
-      }else{
-        console.log("no position found.");
-      }
+    var alt = params.alt;
+    if(isNaN(alt)){
+      alt = 0; // default
+    }
+    var pos = this.el.getAttribute('position');
+    this.el.setAttribute('position',{x:pos.x, y:alt, z:pos.z},true);
+      
   }
 });
 </script>
@@ -115,24 +116,24 @@
   
       var params = window.reallyHackyGlobalLocation;
       var opacity = params.opacity;
-      if (!isNaN(opacity)){
-        var mesh = this.el.getObject3D('mesh');
-        if (!!mesh) {  
-          mesh.traverse(function (node) {
-            if (node.isMesh) {
-              node.material.opacity = opacity;
-              node.material.transparent = opacity < 1.0;
-              node.material.needsUpdate = true;
-            }else{
-              console.log("node not mesh")
-            }
-          });
-        }else{
-          console.log("no nodes found");
-        }
-      }else{
-        console.log("parameter 'opacity' not found");
+      if (isNaN(opacity)){
+        opacity = 0.6; // default
       }
+      var mesh = this.el.getObject3D('mesh');
+      if (!!mesh) {  
+        mesh.traverse(function (node) {
+          if (node.isMesh) {
+            node.material.opacity = opacity;
+            node.material.transparent = opacity < 1.0;
+            node.material.needsUpdate = true;
+          }else{
+            console.log("node not mesh")
+          }
+        });
+      }else{
+        console.log("no nodes found");
+      }
+
 
     });
   }
@@ -144,72 +145,74 @@
 
 
   init: function () {
-    var params = window.reallyHackyGlobalLocation;
-    this.revspersec = 0.6;//params.revspersec;
+    this.valid = false;
     this.meshes = [];
-    this.lastTime_ms = 0;
-    this.timeToUpdate_ms = 0;
-    this.sectorCount = 0;
-    this.sectorsperrev=300;
-    var self = this;
-    this.el.addEventListener('model-loaded', () =>{
-      var revspersec = self.revspersec;
-      if ((!isNaN(revspersec)) && (revspersec > 0)){
-        var mesh = self.el.getObject3D('mesh');
-        if (!!mesh) {  
-          mesh.traverse(function (node) {
+    this.group = new THREE.Group();
+    this.groupBb = new THREE.Box3();
+    this.groupBbCenter = null;
+    
+  
+    var params = window.reallyHackyGlobalLocation;
+    var period_s = params.period_s;
+    var sectorsperrev= params.sectorsperrev;
+
+
+    if (isNaN(period_s)){
+      period_s = 0; //default
+    }
+    if((isNaN(sectorsperrev)) || (sectorsperrev == 0) ){
+      sectorsperrev = 300; // default
+    }
+    if(period_s > 0){
+      let tickTime_ms = period_s / sectorsperrev * 1000;
+      this.tick = AFRAME.utils.throttleTick(this.tick, tickTime_ms, this);
+      
+      this.radspersector = 2 * Math.PI / sectorsperrev;
+
+      var self = this;
+
+      this.el.addEventListener('model-loaded', () =>{
+
+        var meshes = self.meshes;
+        var parent = self.el.getObject3D('mesh');
+        if (!!parent) {  
+          parent.traverse(function (node) {
             if (node.isMesh) {
-              self.meshes.push(node);
+              meshes.push(node);
             }
           });
         }
-
-      }else{
-        console.log("parameter 'opacity' not found");
-      }
-
-    });
+        if(meshes.length > 0){
+          meshes.forEach(function(mesh){
+            self.group.add(mesh);
+          });
+          self.groupBb.setFromObject( self.group );
+          self.groupBbCenter = self.groupBb.getCenter();
+          self.el.sceneEl.object3D.add(self.group);
+          self.valid = true;
+        }
+      });
+    }
+    
+    
   },
 
     tick: function () {
 
-
+      // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
       const rotateAbout = (mesh, axis, axisPosition, angle) => {
-    mesh.geometry.applyMatrix(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
-    mesh.geometry.applyMatrix(new THREE.Matrix4().makeRotationAxis(axis, angle));    //rotate geometry about axis
-    mesh.geometry.applyMatrix(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
-    }
+        mesh.geometry.applyMatrix(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
+        mesh.geometry.applyMatrix(new THREE.Matrix4().makeRotationAxis(axis, angle));    //rotate geometry about axis
+        mesh.geometry.applyMatrix(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
+      }
 
-      var revspersec = this.revspersec;
-      var meshes = this.meshes;
-      var sectorsperrev = this.sectorsperrev;
-      var radspersector = 2 * Math.PI / sectorsperrev;
-
-      lastTime_ms = this.lastTime_ms;
-
-      if((revspersec > 0)&&(meshes.length > 0)){
-        var secsperrev = 1 / revspersec;
-        var timepersector_ms = secsperrev * 1000 / sectorsperrev;
-        
-        var time_ms = Date.now();
-        var timeDiff_ms = time_ms - lastTime_ms;
-        this.lastTime_ms = time_ms;
-
-        this.timeToUpdate_ms -= timeDiff_ms;
-        if(this.timeToUpdate_ms <= 0){
-          this.timeToUpdate_ms = timepersector_ms;
-
-          var sectorCount = this.sectorCount + 1;
-          if(sectorCount > sectorsperrev){
-            sectorCount = 0;
-          }
-          this.sectorCount = sectorCount;
-          rotation = radspersector * sectorCount;
-
-          meshes.forEach(mesh => {
-            mesh.rotation.x = rotation;
+      if(this.valid){
+        var meshes = this.meshes;
+        var center = this.groupBbCenter;
+        var rotation = this.radspersector;
+        meshes.forEach(function(mesh){
+            rotateAbout(mesh, new THREE.Vector3(0,1,0), center, rotation);
           });
-        }
       }
     },
 });
@@ -233,13 +236,12 @@
       id="model"
       gltf-model="#model-asset"
       opacitychanger
-      positionchanger
       scalechanger
+      positionchanger
       spinchanger
-      scale="1 1 1" 
-      position="0 0 0" 
-      rotation="0 0 0">
+      >
     </a-entity>
+
 
     <a-camera gps-projected-camera read-rotation></a-camera>
   </a-scene>
