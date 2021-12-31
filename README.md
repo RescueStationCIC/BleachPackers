@@ -14,7 +14,9 @@ Use the following params in the url:
  
 lat: latitude  
 lon: longitude  
-alt: altitude - actually the height above the camera, in metres  
+alt: altitude - actually the height above the camera, in metres
+opacity: opacity - floating point number between 0 (transparent) and 1 (opaque)
+period_s: rotation - the number of seconds to compplete a full revolution default is 0)  
 
 alternative:   
 params: base64 encoded json - the above parameters formatted as a JSON object and base64 encoded
