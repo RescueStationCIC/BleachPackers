@@ -55,7 +55,7 @@
         var loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
         
         console.log(`substituting coordinates: ${loc}`);
-        var gps = document.createAttribute("gps-projected-entity-place");
+        var gps = document.createAttribute("gps-entity-place");
         gps.value  = loc;
         el.setAttributeNode(gps);
 
@@ -272,7 +272,7 @@
     </a-entity>
 
 
-    <a-camera gps-projected-camera read-rotation></a-camera>
+    <a-camera gps-camera read-rotation></a-camera>
   </a-scene>
 </body>
 
