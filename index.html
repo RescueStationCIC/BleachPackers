@@ -91,7 +91,7 @@
       var params = window.reallyHackyGlobalLocation;
       var opacity = params.opacity;
       if (isNaN(opacity)){
-        opacity = 0.6; // default
+        opacity = 1.0; // default
       }
       var mesh = this.el.getObject3D('mesh');
       if (!!mesh) {  
@@ -196,11 +196,11 @@
     }
 
     if(isNaN(alt_m)){
-      alt_m = 1;
+      alt_m = 0; //default. Bottom of bounding box is on ground
     }
 
     if(isNaN(height_m) || (height_m == 0)){
-      height_m = 5.0;
+      height_m = 1.8; //default. Size is human scale.
     }
 
     var component = this;
