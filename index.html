@@ -29,8 +29,8 @@
         var params = {
           lat: parseFloat(urlParams.get('lat')),
           lon: parseFloat(urlParams.get('lon')),
-          alt: parseFloat(urlParams.get('alt')),
-          scale: parseFloat(urlParams.get('scale')),
+          alt_m: parseFloat(urlParams.get('alt_m')),
+          height_m: parseFloat(urlParams.get('height_m')),
           opacity: parseFloat(urlParams.get('opacity')),
           period_s: parseFloat(urlParams.get('period_s'))
         };
@@ -79,36 +79,8 @@
 
 </script>
 
-<script>
-  AFRAME.registerComponent('scalechanger', {
-  init: function () {
-    console.log("scalechanger:init");
-    var params = window.reallyHackyGlobalLocation;
-    var scale = params.scale;
-    if(isNaN(scale)){
-      scale = 1; //default
-    }
-    this.el.setAttribute('scale',{x:scale, y:scale, z:scale}, true);
-    
-  }
-});
-</script>
 
-<script>
-  AFRAME.registerComponent('positionchanger', {
-  init: function () {
-    console.log("positionchanger:init");
-    var params = window.reallyHackyGlobalLocation;
-    var alt = params.alt;
-    if(isNaN(alt)){
-      alt = 0; // default
-    }
-    var pos = this.el.getAttribute('position');
-    this.el.setAttribute('position',{x:pos.x, y:alt, z:pos.z},true);
-      
-  }
-});
-</script>
+
 
 <script>
   AFRAME.registerComponent('opacitychanger', {
@@ -128,8 +100,6 @@
             node.material.opacity = opacity;
             node.material.transparent = opacity < 1.0;
             node.material.needsUpdate = true;
-          }else{
-            console.log("node not mesh")
           }
         });
       }else{
@@ -143,80 +113,132 @@
 </script>
 
 <script>
-  AFRAME.registerComponent('spinchanger', {
+  AFRAME.registerComponent('spatialchanger', {
 
 
   init: function () {
-    console.log("spinchanger:init");
-    this.valid = false;
-    this.meshes = [];
-    this.group = new THREE.Group();
-    this.groupBb = new THREE.Box3();
-    this.groupBbCenter = null;
+
+    function positionAndScale(gltf, height_m, alt_m){
+      // THANKYOU: https://stackoverflow.com/a/52271526
+
+      var mroot = gltf.scene;
+      var bbox = new THREE.Box3().setFromObject(mroot);
+      var cent = bbox.getCenter(new THREE.Vector3());
+      var size = bbox.getSize(new THREE.Vector3());
+
+      //Rescale the object to normalized space
+      var maxAxis = Math.max(size.x, size.y, size.z);
+      mroot.scale.multiplyScalar((1.0 / maxAxis) * height_m);
+      bbox.setFromObject(mroot);
+      bbox.getCenter(cent);
+      bbox.getSize(size);
+      //Reposition to 0,halfY,0
+      mroot.position.copy(cent).multiplyScalar(-1);
+      mroot.position.y+= (size.y * 0.5) + alt_m;
+    }
+
+    function beginRotation(component, period_s, sectorsperrev){
+      component.valid = false;
+      component.meshes = [];
+      component.center = null;
+      let tickTime_ms = period_s / sectorsperrev * 1000;
+      component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
+      
+      component.radspersector = 2 * Math.PI / sectorsperrev;
+
+      // store meshes, so they are not retraversed on each tick
+      var meshes = component.meshes;
+      var parent = component.el.getObject3D('mesh');
+      if (!!parent) {  
+        parent.traverse(function (node) {
+          if (node.isMesh) {
+            meshes.push(node);
+          }
+        });
+      }
+
+      if(meshes.length > 0){
+          // group the meshes together
+          const group = new THREE.Group();
+          const boundingBox = new THREE.Box3();
+          
+          meshes.forEach(function(mesh){
+            group.add(mesh); // this will clobber the mesh's parent
+          });
+
+          // place a bounding box around the group to get the centre
+          boundingBox.setFromObject( group );
+          component.center = boundingBox.getCenter();
+
+          meshes.forEach(function(mesh){
+            parent.add(mesh); //re-instate the mesh's parent
+          });
+
+          //ready for ticks
+          component.valid = true;
+      }
     
+    }
+
+    console.log("spatialchanger:init");
   
     var params = window.reallyHackyGlobalLocation;
     var period_s = params.period_s;
     var sectorsperrev= params.sectorsperrev;
-
+    var height_m = params.height_m;
+    var alt_m = params.alt_m;
 
     if (isNaN(period_s)){
-      period_s = 0; //default
+      period_s = 0; //default, no rotation
     }
     if((isNaN(sectorsperrev)) || (sectorsperrev == 0) ){
       sectorsperrev = 300; // default
     }
-    if(period_s > 0){
-      let tickTime_ms = period_s / sectorsperrev * 1000;
-      this.tick = AFRAME.utils.throttleTick(this.tick, tickTime_ms, this);
-      
-      this.radspersector = 2 * Math.PI / sectorsperrev;
 
-      var self = this;
-
-      this.el.addEventListener('model-loaded', () =>{
-
-        var meshes = self.meshes;
-        var parent = self.el.getObject3D('mesh');
-        if (!!parent) {  
-          parent.traverse(function (node) {
-            if (node.isMesh) {
-              meshes.push(node);
-            }
-          });
-        }
-        if(meshes.length > 0){
-          meshes.forEach(function(mesh){
-            self.group.add(mesh);
-          });
-          self.groupBb.setFromObject( self.group );
-          self.groupBbCenter = self.groupBb.getCenter();
-          meshes.forEach(function(mesh){
-            parent.add(mesh);
-          });
-          self.valid = true;
-        }
-      });
+    if(isNaN(alt_m)){
+      alt_m = 1;
     }
+
+    if(isNaN(height_m) || (height_m == 0)){
+      height_m = 5.0;
+    }
+
+    var component = this;
+
+    this.el.addEventListener('model-loaded', (event) =>{
+
+      var gltf = {
+        scene: event.detail.model
+      };
+
+      // gltf models all seem to be offset from the origin. 
+      // apply a correction: reset the model's origin, coincident with the scene's center
+      // and scale, such that the model's height is in M.
+      positionAndScale(gltf,height_m, alt_m);
+
+      if(period_s > 0){
+        beginRotation(component, period_s, sectorsperrev);
+      }
+      
+    });
     
     
   },
 
     tick: function () {
-
       // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
-      const rotateAbout = (mesh, axis, axisPosition, angle) => {
+      const rotateAbout = function (mesh, axis, axisPosition, angle) {
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
-        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));    //rotate geometry about axis
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));    //rotate geometry about axis  
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
       }
 
       if(this.valid){
         var meshes = this.meshes;
-        var center = this.groupBbCenter;
+        var center = this.center;
         var rotation = this.radspersector;
         meshes.forEach(function(mesh){
-            rotateAbout(mesh, new THREE.Vector3(0,1,0), center, rotation);
+            rotateAbout(mesh, new THREE.Vector3(0,1,0), center, rotation); 
           });
       }
     },
@@ -264,11 +286,10 @@
     <a-entity 
       id="model"
       gltf-model="#model-asset"
-      spinchanger
-      scalechanger
+      spatialchanger
       opacitychanger
-      positionchanger
       >
+ 
     </a-entity>
 
 

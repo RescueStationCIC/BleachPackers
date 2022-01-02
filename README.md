@@ -14,7 +14,8 @@ Use the following params in the url:
  
 lat: latitude  
 lon: longitude  
-alt: altitude - actually the height above the camera, in metres
+alt_m: altitude - actually the height above the camera, in metres
+height_m: height - the scale height of the extent of the model, in m
 opacity: opacity - floating point number between 0 (transparent) and 1 (opaque)
 period_s: rotation - the number of seconds to compplete a full revolution default is 0)  
 
