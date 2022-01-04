@@ -7,77 +7,6 @@
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js" ></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js" ></script>
   
-  <script>
-
-    function processParams(){
-      console.log("processParams");
-      const urlParams = new URLSearchParams(window.location.search);
-      try {
-        var simulate = urlParams.get('simulate')=='true';
-
-        console.log(`simulate: ${simulate}`);
-
-        var params = JSON.parse(atob(urlParams.get('params')));
-
-        if (null == params) {
-          throw "Combo parse failed.";
-        } else {
-          console.log("Successfully parsed encoded params");
-        }
-      } catch (e) {
-        console.log("Combo failed. Dropping through to individual params");
-        var params = {
-          lat: parseFloat(urlParams.get('lat')),
-          lon: parseFloat(urlParams.get('lon')),
-          alt_m: parseFloat(urlParams.get('alt_m')),
-          height_m: parseFloat(urlParams.get('height_m')),
-          opacity: parseFloat(urlParams.get('opacity')),
-          period_s: parseFloat(urlParams.get('period_s'))
-        };
-      }
-      params.simulate = simulate;
-
-      console.log("using the following params:");
-      console.log(params);
-      return params;
-    }
-
-    //THANKYOU: https://stackoverflow.com/a/61443888
-    function changeReadOnlyLocations(params){
-      console.log("changeReadOnlyLocations");
-
-      var sceneEl = document.querySelector('a-scene');
-      var el = sceneEl.querySelector("#model");
-
-      console.log("processing location");
-
-      if (!isNaN(params.lon) && !isNaN(params.lon)) {
-        var loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
-        
-        console.log(`substituting coordinates: ${loc}`);
-        var gps = document.createAttribute("gps-entity-place");
-        gps.value  = loc;
-        el.setAttributeNode(gps);
-
-        if(params.simulate){
-          console.log('simulating location');
-          var cameraEl = sceneEl.querySelector('a-camera');
-          cameraEl.setAttribute('simulateLatitude', params.lat);
-          cameraEl.setAttribute('simulateLongitude', params.lon);
-        }
-
-      } else {
-        console.log("No coordinates found.");
-      }
-    }
-
-    window.onload = function() {
-      var params = processParams();
-      changeReadOnlyLocations(params);
-      window.reallyHackyGlobalLocation = params;
-    }
-
-</script>
 
 
 
@@ -86,6 +15,7 @@
   AFRAME.registerComponent('opacitychanger', {
 
   init: function () {
+    console.log("*** 3 ***");
     this.el.addEventListener('model-loaded', () =>{
       console.log("opacitychanger:init");
       var params = window.reallyHackyGlobalLocation;
@@ -118,45 +48,64 @@
 
   init: function () {
 
-    function positionAndScale(gltf, height_m, alt_m){
-      // THANKYOU: https://stackoverflow.com/a/52271526
 
-      var mroot = gltf.scene;
-      var bbox = new THREE.Box3().setFromObject(mroot);
-      var cent = bbox.getCenter(new THREE.Vector3());
-      var size = bbox.getSize(new THREE.Vector3());
 
-      //Rescale the object to normalized space
-      var maxAxis = Math.max(size.x, size.y, size.z);
-      mroot.scale.multiplyScalar((1.0 / maxAxis) * height_m);
-      bbox.setFromObject(mroot);
-      bbox.getCenter(cent);
-      bbox.getSize(size);
-      //Reposition to 0,halfY,0
-      mroot.position.copy(cent).multiplyScalar(-1);
-      mroot.position.y+= (size.y * 0.5) + alt_m;
-    }
-
-    function beginRotation(component, period_s, sectorsperrev){
-      component.valid = false;
+    function beginTransforms(component){
       component.meshes = [];
-      component.center = null;
-      let tickTime_ms = period_s / sectorsperrev * 1000;
-      component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
-      
-      component.radspersector = 2 * Math.PI / sectorsperrev;
+      component.parent = component.el.getObject3D('mesh');
+
 
       // store meshes, so they are not retraversed on each tick
       var meshes = component.meshes;
-      var parent = component.el.getObject3D('mesh');
-      if (!!parent) {  
+      var parent = component.parent;
+      if (!!parent) { 
+        component.parent = parent; 
         parent.traverse(function (node) {
           if (node.isMesh) {
             meshes.push(node);
           }
         });
       }
+    }
 
+
+
+
+    function findScaleFactor(gltf, height_m){
+      // THANKYOU: https://stackoverflow.com/a/52271526
+      
+      var mroot = gltf.scene;
+      var bbox = new THREE.Box3().setFromObject(mroot);
+      var size = bbox.getSize(new THREE.Vector3());
+
+      //Rescale the object to normalized space
+      var maxAxis = Math.max(size.x, size.y, size.z);
+      return ((1.0 / maxAxis) * height_m);
+    }
+
+    function positionAndScale(meshes, scale, alt_m){
+
+
+      // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
+      function doTransform(mesh, scale, alt_m) {
+        //mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeScale(scale)); 
+        //mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y + alt_m, axisPosition.z-mesh.position.z));  //translate geometry back to original location
+      }
+
+      meshes.forEach(function(mesh){
+        doTransform(mesh, scale, alt_m); 
+      });
+    }
+
+    function beginRotation(component, period_s, sectorsperrev){
+      component.rotateReady = false;
+      component.center = null;
+      let tickTime_ms = period_s / sectorsperrev * 1000;
+      component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
+      component.radspersector = 2 * Math.PI / sectorsperrev;
+      let meshes = component.meshes;
+      let parent = component.parent;
       if(meshes.length > 0){
           // group the meshes together
           const group = new THREE.Group();
@@ -175,7 +124,7 @@
           });
 
           //ready for ticks
-          component.valid = true;
+          component.rotateReady = true;
       }
     
     }
@@ -211,12 +160,16 @@
         scene: event.detail.model
       };
 
-      // gltf models all seem to be offset from the origin. 
-      // apply a correction: reset the model's origin, coincident with the scene's center
-      // and scale, such that the model's height is in M.
-      positionAndScale(gltf,height_m, alt_m);
+      // gathers transform data and stores it in the component
+      beginTransforms(component);
+
+      var scale = findScaleFactor(gltf, height_m);
+
+      // applies transforms for position and scale
+      //positionAndScale(component.meshes, scale, alt_m);
 
       if(period_s > 0){
+        // sets up rotation data and stores it in the component, sets up tick rate
         beginRotation(component, period_s, sectorsperrev);
       }
       
@@ -233,7 +186,7 @@
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
       }
 
-      if(this.valid){
+      if(this.rotateReady){
         var meshes = this.meshes;
         var center = this.center;
         var rotation = this.radspersector;
@@ -276,9 +229,10 @@
   <a-scene 
     fog="type: exponential; color: #AAA; density: 0.0005" 
     renderer="logarithmicDepthBuffer: true;"
+    embedded
     vr-mode-ui="enabled: false"
 
-    arjs="sourceType: webcam; debugUIEnabled: false;">
+    arjs="sourceType: webcam; debugUIEnabled: true;">
     <a-assets  timeout="100000">
       <a-asset-item id="model-asset" src="./assets/model.glb" />
     </a-assets>
@@ -286,14 +240,15 @@
     <a-entity 
       id="model"
       gltf-model="#model-asset"
-      spatialchanger
+      gps-entity-place="latitude:53.44932359968209; longitude: -2.272920271895546"
       opacitychanger
+      spatialchanger
       >
  
     </a-entity>
 
 
-    <a-camera gps-camera read-rotation></a-camera>
+    <a-camera gps-camera simulateLatitude="53.44931880764561" simulateLongitude="-2.273019513632567" read-rotation ></a-camera>
   </a-scene>
 </body>
 
@@ -322,6 +277,100 @@
   backingEl.onended = function(event){
     onPause();
   }
+</script>
+<script>
+
+  function processParams(){
+    console.log("processParams");
+    const urlParams = new URLSearchParams(window.location.search);
+    try {
+      var simulate = urlParams.get('simulate')=='true';
+
+      console.log(`simulate: ${simulate}`);
+
+      var params = JSON.parse(atob(urlParams.get('params')));
+
+      if (null == params) {
+        throw "Combo parse failed.";
+      } else {
+        console.log("Successfully parsed encoded params");
+      }
+    } catch (e) {
+      console.log("Combo failed. Dropping through to individual params");
+      var params = {
+        lat: parseFloat(urlParams.get('lat')),
+        lon: parseFloat(urlParams.get('lon')),
+        alt_m: parseFloat(urlParams.get('alt_m')),
+        height_m: parseFloat(urlParams.get('height_m')),
+        opacity: parseFloat(urlParams.get('opacity')),
+        period_s: parseFloat(urlParams.get('period_s'))
+      };
+    }
+    params.simulate = simulate;
+
+    console.log("using the following params:");
+    console.log(params);
+    return params;
+  }
+
+  const EARTH_RADIUS = 6378137; // assume earth is sphere
+
+  //THANKYOU: http://gis.stackexchange.com/questions/2951/algorithm-for-offsetting-a-latitude-longitude-by-some-amount-of-meters
+  function translateOnEarth (in_lat, in_lon, heading_deg, distance_m) {
+    const degToRad = THREE.Math.degToRad;  
+    const radToDeg = THREE.Math.radToDeg;  
+    const dLat = distance_m * Math.cos(degToRad(heading_deg)) / EARTH_RADIUS;
+    const dLon = distance_m * Math.sin(degToRad(heading_deg)) / (EARTH_RADIUS * Math.cos(degToRad(in_lat)));
+
+    return {
+      lat: in_lat + radToDeg(dLat), 
+      lon: in_lon + radToDeg(dLon)
+    }
+  }
+
+  const OFFSET_BY_DEG = -90;
+  const OFFSET_BY_M = 10;
+
+  //THANKYOU: https://stackoverflow.com/a/61443888
+  function changeReadOnlyLocations(params){
+    console.log("changeReadOnlyLocations");
+
+    var sceneEl = document.querySelector('a-scene');
+    var el = sceneEl.querySelector("#model");
+
+    console.log("processing location");
+
+    if (!isNaN(params.lon) && !isNaN(params.lon)) {
+      var loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
+      console.log(`input coordinates: ${loc}`);
+      var gps = document.createAttribute("gps-entity-place");
+      gps.value  = loc;
+      el.setAttributeNode(gps);
+
+      if(params.simulate){
+        const offset = translateOnEarth(params.lat, params.lon, OFFSET_BY_DEG, OFFSET_BY_M);
+        console.log('simulating location');
+        var sim = `latitude: ${offset.lat}; longitude: ${offset.lon};`;
+        console.log(`substituting coordinates: ${sim}`);
+        var cameraEl = sceneEl.querySelector('a-camera');
+        cameraEl.setAttribute('simulateLatitude', params.lat);
+        cameraEl.setAttribute('simulateLongitude', params.lon);
+      }
+
+    } else {
+      console.log("No coordinates found.");
+    }
+  }
+
+  
+    var params = processParams();
+    console.log("*** 1 ***");
+    //changeReadOnlyLocations(params);
+    window.onload = function() {  
+      console.log("*** 2 ***");
+      window.reallyHackyGlobalLocation = params;
+    }
+
 </script>
 
 
