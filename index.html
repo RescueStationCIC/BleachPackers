@@ -90,9 +90,6 @@
           component.ready = true;
       }
 
-
-
-
     }
 
 
@@ -246,7 +243,6 @@
     <a-entity 
       id="model"
       gltf-model="#model-asset"
-      gps-entity-place="latitude:53.44932359968209; longitude: -2.272920271895546"
       opacitychanger
       spatialchanger
       >
@@ -254,7 +250,7 @@
     </a-entity>
 
 
-    <a-camera gps-camera simulateLatitude="53.44931880764561" simulateLongitude="-2.273019513632567" read-rotation ></a-camera>
+    <a-camera gps-camera read-rotation ></a-camera>
   </a-scene>
 </body>
 
@@ -334,8 +330,8 @@
     }
   }
 
-  const OFFSET_BY_DEG = -90;
-  const OFFSET_BY_M = 10;
+  const OFFSET_BY_DEG = 70;
+  const OFFSET_BY_M = 0;
 
   //THANKYOU: https://stackoverflow.com/a/61443888
   function changeReadOnlyLocations(params){
@@ -347,7 +343,7 @@
     console.log("processing location");
 
     if (!isNaN(params.lon) && !isNaN(params.lon)) {
-      var loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
+      const loc = `latitude: ${params.lat}; longitude: ${params.lon};`;
       console.log(`input coordinates: ${loc}`);
       var gps = document.createAttribute("gps-entity-place");
       gps.value  = loc;
@@ -355,12 +351,17 @@
 
       if(params.simulate){
         const offset = translateOnEarth(params.lat, params.lon, OFFSET_BY_DEG, OFFSET_BY_M);
+        const sim = `simulateLatitude: ${offset.lat}; simulateLongitude: ${offset.lon};`;
+
         console.log('simulating location');
-        var sim = `latitude: ${offset.lat}; longitude: ${offset.lon};`;
-        console.log(`substituting coordinates: ${sim}`);
+        console.log(`input coordinates:`);
+        console.log(loc);
+        console.log('simulated camera position');
+        console.log(sim);
+        
         var cameraEl = sceneEl.querySelector('a-camera');
-        cameraEl.setAttribute('simulateLatitude', params.lat);
-        cameraEl.setAttribute('simulateLongitude', params.lon);
+        cameraEl.setAttribute('gps-camera',sim);
+
       }
 
     } else {
@@ -371,7 +372,7 @@
   
     var params = processParams();
     console.log("*** 1 ***");
-    //changeReadOnlyLocations(params);
+    changeReadOnlyLocations(params);
     window.onload = function() {  
       console.log("*** 2 ***");
       window.reallyHackyGlobalLocation = params;
