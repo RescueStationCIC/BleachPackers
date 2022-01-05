@@ -51,6 +51,8 @@
 
 
     function beginTransforms(component){
+      component.ready = false;
+      component.center = null;
       component.meshes = [];
       component.parent = component.el.getObject3D('mesh');
 
@@ -66,46 +68,7 @@
           }
         });
       }
-    }
 
-
-
-
-    function findScaleFactor(gltf, height_m){
-      // THANKYOU: https://stackoverflow.com/a/52271526
-      
-      var mroot = gltf.scene;
-      var bbox = new THREE.Box3().setFromObject(mroot);
-      var size = bbox.getSize(new THREE.Vector3());
-
-      //Rescale the object to normalized space
-      var maxAxis = Math.max(size.x, size.y, size.z);
-      return ((1.0 / maxAxis) * height_m);
-    }
-
-    function positionAndScale(meshes, scale, alt_m){
-
-
-      // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
-      function doTransform(mesh, scale, alt_m) {
-        //mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
-        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeScale(scale)); 
-        //mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y + alt_m, axisPosition.z-mesh.position.z));  //translate geometry back to original location
-      }
-
-      meshes.forEach(function(mesh){
-        doTransform(mesh, scale, alt_m); 
-      });
-    }
-
-    function beginRotation(component, period_s, sectorsperrev){
-      component.rotateReady = false;
-      component.center = null;
-      let tickTime_ms = period_s / sectorsperrev * 1000;
-      component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
-      component.radspersector = 2 * Math.PI / sectorsperrev;
-      let meshes = component.meshes;
-      let parent = component.parent;
       if(meshes.length > 0){
           // group the meshes together
           const group = new THREE.Group();
@@ -124,9 +87,52 @@
           });
 
           //ready for ticks
-          component.rotateReady = true;
+          component.ready = true;
       }
-    
+
+
+
+
+    }
+
+
+
+
+    function findScaleFactor(gltf, height_m){
+      // THANKYOU: https://stackoverflow.com/a/52271526
+      
+      var mroot = gltf.scene;
+      var bbox = new THREE.Box3().setFromObject(mroot);
+      var size = bbox.getSize(new THREE.Vector3());
+
+      //Rescale the object to normalized space
+      var maxAxis = Math.max(size.x, size.y, size.z);
+      return ((1.0 / maxAxis) * height_m);
+    }
+
+    function positionAndScale(component, scale, alt_m){
+
+
+      // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
+      function doTransform(mesh, axis, axisPosition, scale, alt_m) {
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeScale(scale, scale, scale)); 
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y + alt_m, axisPosition.z-mesh.position.z));  //translate geometry back to original location
+      }
+
+      if(component.ready){
+        component.meshes.forEach(function(mesh){
+          doTransform(mesh, new THREE.Vector3(0,1,0), component.center, scale, alt_m); 
+        });
+      }
+    }
+
+    function beginRotation(component, period_s, sectorsperrev){
+      if(component.ready){
+        let tickTime_ms = period_s / sectorsperrev * 1000;
+        component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
+        component.radspersector = 2 * Math.PI / sectorsperrev;
+      }
     }
 
     console.log("spatialchanger:init");
@@ -166,7 +172,7 @@
       var scale = findScaleFactor(gltf, height_m);
 
       // applies transforms for position and scale
-      //positionAndScale(component.meshes, scale, alt_m);
+      positionAndScale(component, scale, alt_m);
 
       if(period_s > 0){
         // sets up rotation data and stores it in the component, sets up tick rate
@@ -186,7 +192,7 @@
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
       }
 
-      if(this.rotateReady){
+      if(this.ready){
         var meshes = this.meshes;
         var center = this.center;
         var rotation = this.radspersector;
