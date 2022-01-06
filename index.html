@@ -246,11 +246,14 @@
     </a-assets>
     <a-entity
       id="correction"
+      rotation="0 +90 0"
+      position="-15 0 0"
       >
       
     <a-entity 
       id="model"
       gltf-model="#model-asset"
+      transparent="false"
       spatialchanger>
     </a-entity>
     </a-entity>
@@ -410,12 +413,12 @@
     var c_rz = params.c_rz;
 
     var c = {
-        x:  isNaN(cx)?0.0:cx,
-        y: isNaN(cy)?0.0:cy,
-        z: isNaN(cz)?0.0: cz,
-        rx:  isNaN(cx)?0.0:cx,
-        ry: isNaN(cy)?0.0:cy,
-        rz: isNaN(cz)?0.0: cz
+        x:  isNaN(cx)?0.0:c_x,
+        y: isNaN(cy)?0.0:c_y,
+        z: isNaN(cz)?0.0: c_z,
+        rx:  isNaN(cx)?0.0:c_rx,
+        ry: isNaN(cy)?0.0:c_ry,
+        rz: isNaN(cz)?0.0: c_rz
     }
     var sceneEl = document.querySelector('a-scene');
     var el = sceneEl.querySelector("#correction");
