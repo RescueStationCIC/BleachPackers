@@ -92,7 +92,7 @@
 
 
 
-    function findScaleFactor(gltf, height_m){
+    function findScaleFactor(gltf, height_m, model_height_m){
       // THANKYOU: https://stackoverflow.com/a/52271526
       
       var mroot = gltf.scene;
@@ -100,7 +100,16 @@
       var size = bbox.getSize(new THREE.Vector3());
 
       //Rescale the object to it's normalised height
-      return ((1.0 / size.y) * height_m);
+
+      var reported_height_m = size.y;
+
+      var SFmodel = model_height_m / reported_height_m;
+
+      var SFdesired = height_m / model_height_m;
+      
+      var SFall = SFmodel * SFdesired;
+
+      return SFall;
     }
 
     function positionAndScale(component, scale, alt_m){
@@ -164,10 +173,8 @@
       beginTransforms(component);
 
       var scale = 1.0;
-      if((isNaN(model_height_m) || model_height_m == 0)){
-        scale = findScaleFactor(gltf, height_m);
-      }else{
-        scale = height_m / model_height_m; 
+      if((!isNaN(model_height_m) && model_height_m != 0)){
+        scale = findScaleFactor(gltf, height_m, model_height_m);
       }
 
 
