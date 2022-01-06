@@ -48,14 +48,12 @@
 
   init: function () {
 
-
-
     function beginTransforms(component){
-      component.ready = false;
+      component.readyForTicks = false;
       component.center = null;
       component.meshes = [];
       component.parent = component.el.getObject3D('mesh');
-
+  
 
       // store meshes, so they are not retraversed on each tick
       var meshes = component.meshes;
@@ -86,8 +84,7 @@
             parent.add(mesh); //re-instate the mesh's parent
           });
 
-          //ready for ticks
-          component.ready = true;
+
       }
 
     }
@@ -102,9 +99,8 @@
       var bbox = new THREE.Box3().setFromObject(mroot);
       var size = bbox.getSize(new THREE.Vector3());
 
-      //Rescale the object to normalized space
-      var maxAxis = Math.max(size.x, size.y, size.z);
-      return ((1.0 / maxAxis) * height_m);
+      //Rescale the object to it's normalised height
+      return ((1.0 / size.y) * height_m);
     }
 
     function positionAndScale(component, scale, alt_m){
@@ -117,19 +113,18 @@
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y + alt_m, axisPosition.z-mesh.position.z));  //translate geometry back to original location
       }
 
-      if(component.ready){
-        component.meshes.forEach(function(mesh){
-          doTransform(mesh, new THREE.Vector3(0,1,0), component.center, scale, alt_m); 
-        });
-      }
+
+      component.meshes.forEach(function(mesh){
+        doTransform(mesh, new THREE.Vector3(0,1,0), component.center, scale, alt_m); 
+      });
+      
     }
 
     function beginRotation(component, period_s, sectorsperrev){
-      if(component.ready){
         let tickTime_ms = period_s / sectorsperrev * 1000;
         component.tick = AFRAME.utils.throttleTick(component.tick, tickTime_ms, component);
         component.radspersector = 2 * Math.PI / sectorsperrev;
-      }
+        component.readyForTicks = true;
     }
 
     console.log("spatialchanger:init");
@@ -139,6 +134,8 @@
     var sectorsperrev= params.sectorsperrev;
     var height_m = params.height_m;
     var alt_m = params.alt_m;
+    var model_height_m = params.model_height_m;
+
 
     if (isNaN(period_s)){
       period_s = 0; //default, no rotation
@@ -166,7 +163,14 @@
       // gathers transform data and stores it in the component
       beginTransforms(component);
 
-      var scale = findScaleFactor(gltf, height_m);
+      var scale = 1.0;
+      if((isNaN(model_height_m) || model_height_m == 0)){
+        scale = findScaleFactor(gltf, height_m);
+      }else{
+        scale = height_m / model_height_m; 
+      }
+
+
 
       // applies transforms for position and scale
       positionAndScale(component, scale, alt_m);
@@ -187,14 +191,16 @@
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeRotationAxis(axis, angle));    //rotate geometry about axis  
         mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y, axisPosition.z-mesh.position.z));  //translate geometry back to original location
+
       }
 
-      if(this.ready){
+      if(this.readyForTicks){
         var meshes = this.meshes;
         var center = this.center;
         var rotation = this.radspersector;
+        var corrections = this.corrections;
         meshes.forEach(function(mesh){
-            rotateAbout(mesh, new THREE.Vector3(0,1,0), center, rotation); 
+            rotateAbout(mesh, new THREE.Vector3(0,1,0), center, rotation, corrections); 
           });
       }
     },
@@ -230,23 +236,26 @@
   </audio>
   <input type="button" id="toggle" class="on" onclick="togglestyle(this)" />
   <a-scene 
-    fog="type: exponential; color: #AAA; density: 0.0005" 
-    renderer="logarithmicDepthBuffer: true;"
+
+    renderer="logarithmicDepthBuffer: false;"
     embedded
     vr-mode-ui="enabled: false"
-
-    arjs="sourceType: webcam; debugUIEnabled: true;">
+    arjs="sourceType: webcam; debugUIEnabled: false;">
     <a-assets  timeout="100000">
       <a-asset-item id="model-asset" src="./assets/model.glb" />
     </a-assets>
-
+    <a-entity
+      id="correction"
+      rotation="0 +90 0"
+      position="-15 0 0"
+      >
+      
     <a-entity 
       id="model"
       gltf-model="#model-asset"
-      opacitychanger
-      spatialchanger
-      >
- 
+      transparent="false"
+      spatialchanger>
+    </a-entity>
     </a-entity>
 
 
@@ -286,9 +295,14 @@
     console.log("processParams");
     const urlParams = new URLSearchParams(window.location.search);
     try {
-      var simulate = urlParams.get('simulate')=='true';
-
-      console.log(`simulate: ${simulate}`);
+      var simulate = null;
+      if (urlParams.get('simulate')=='true'){
+        simulate = {
+          bearing: parseFloat(urlParams.get('bearing')),
+          dist: parseFloat(urlParams.get('dist'))
+        }
+      }
+      console.log(simulate);
 
       var params = JSON.parse(atob(urlParams.get('params')));
 
@@ -305,10 +319,20 @@
         alt_m: parseFloat(urlParams.get('alt_m')),
         height_m: parseFloat(urlParams.get('height_m')),
         opacity: parseFloat(urlParams.get('opacity')),
-        period_s: parseFloat(urlParams.get('period_s'))
+        period_s: parseFloat(urlParams.get('period_s')),
+        model_height_m: parseFloat(urlParams.get('model_height_m')),
+        
+        c_x: parseFloat(urlParams.get('c_x')),
+        c_y: parseFloat(urlParams.get('c_y')),
+        c_z: parseFloat(urlParams.get('c_z')),
+        c_rx: parseFloat(urlParams.get('c_rx')),
+        c_ry: parseFloat(urlParams.get('c_ry')),
+        c_rz: parseFloat(urlParams.get('c_rz'))
+
       };
     }
     params.simulate = simulate;
+
 
     console.log("using the following params:");
     console.log(params);
@@ -350,7 +374,18 @@
       el.setAttributeNode(gps);
 
       if(params.simulate){
-        const offset = translateOnEarth(params.lat, params.lon, OFFSET_BY_DEG, OFFSET_BY_M);
+
+        let bearing = OFFSET_BY_DEG;
+        if(!isNaN(params.simulate.bearing)){
+          bearing = params.simulate.bearing;
+        }
+        let dist = OFFSET_BY_M;
+        if(!isNaN(params.simulate.dist)){
+          dist = params.simulate.dist;
+        }       
+
+
+        const offset = translateOnEarth(params.lat, params.lon, bearing, dist);
         const sim = `simulateLatitude: ${offset.lat}; simulateLongitude: ${offset.lon};`;
 
         console.log('simulating location');
@@ -369,10 +404,33 @@
     }
   }
 
-  
+  function makeCorrections(params){
+    var c_x = params.c_x;
+    var c_y = params.c_y;
+    var c_z = params.c_z;
+    var c_rx = params.c_rx;
+    var c_ry = params.c_ry;
+    var c_rz = params.c_rz;
+
+    var c = {
+        x:  isNaN(cx)?0.0:cx,
+        y: isNaN(cy)?0.0:cy,
+        z: isNaN(cz)?0.0: cz,
+        rx:  isNaN(cx)?0.0:cx,
+        ry: isNaN(cy)?0.0:cy,
+        rz: isNaN(cz)?0.0: cz
+    }
+    var sceneEl = document.querySelector('a-scene');
+    var el = sceneEl.querySelector("#correction");
+    el.setAttribute('position', `${c.x} ${c.y} ${c.z}`);
+    el.setAttribute('rotation', `${c.rx} ${c.ry} ${c.rz}`);
+  }
+
+
     var params = processParams();
     console.log("*** 1 ***");
     changeReadOnlyLocations(params);
+    //makeCorrections(params);
     window.onload = function() {  
       console.log("*** 2 ***");
       window.reallyHackyGlobalLocation = params;
