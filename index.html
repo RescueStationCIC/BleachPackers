@@ -246,8 +246,6 @@
     </a-assets>
     <a-entity
       id="correction"
-      rotation="0 +90 0"
-      position="-15 0 0"
       >
       
     <a-entity 
@@ -259,7 +257,7 @@
     </a-entity>
 
 
-    <a-camera gps-camera read-rotation ></a-camera>
+    <a-camera look-controls-enabled='false' arjs-look-controls='smoothingFactor: 0.1' gps-camera  read-rotation ></a-camera>
   </a-scene>
 </body>
 
@@ -413,12 +411,12 @@
     var c_rz = params.c_rz;
 
     var c = {
-        x:  isNaN(cx)?0.0:c_x,
-        y: isNaN(cy)?0.0:c_y,
-        z: isNaN(cz)?0.0: c_z,
-        rx:  isNaN(cx)?0.0:c_rx,
-        ry: isNaN(cy)?0.0:c_ry,
-        rz: isNaN(cz)?0.0: c_rz
+        x:  isNaN(c_x)?0.0:c_x,
+        y: isNaN(c_y)?0.0:c_y,
+        z: isNaN(c_z)?0.0: c_z,
+        rx:  isNaN(c_x)?0.0:c_rx,
+        ry: isNaN(c_y)?0.0:c_ry,
+        rz: isNaN(c_z)?0.0: c_rz
     }
     var sceneEl = document.querySelector('a-scene');
     var el = sceneEl.querySelector("#correction");
@@ -430,7 +428,7 @@
     var params = processParams();
     console.log("*** 1 ***");
     changeReadOnlyLocations(params);
-    //makeCorrections(params);
+    makeCorrections(params);
     window.onload = function() {  
       console.log("*** 2 ***");
       window.reallyHackyGlobalLocation = params;
