@@ -48,61 +48,9 @@
 
   init: function () {
 
-    function beginTransforms(component){
-      component.readyForTicks = false;
-      component.center = null;
-      component.meshes = [];
-      component.parent = component.el.getObject3D('mesh');
-  
-
-      // store meshes, so they are not retraversed on each tick
-      var meshes = component.meshes;
-      var parent = component.parent;
-      if (!!parent) { 
-        component.parent = parent; 
-        parent.traverse(function (node) {
-          if (node.isMesh) {
-            meshes.push(node);
-          }
-        });
-      }
-
-      if(meshes.length > 0){
-          // group the meshes together
-          const group = new THREE.Group();
-          const boundingBox = new THREE.Box3();
-          
-          meshes.forEach(function(mesh){
-            group.add(mesh); // this will clobber the mesh's parent
-          });
-
-          // place a bounding box around the group to get the centre
-          boundingBox.setFromObject( group );
-          component.center = boundingBox.getCenter();
-
-          meshes.forEach(function(mesh){
-            parent.add(mesh); //re-instate the mesh's parent
-          });
-
-
-      }
-
-    }
-
-
-
-
-    function findScaleFactor(gltf, height_m, model_height_m){
+    function findScaleFactor( height_m, model_height_m, reported_height_m){
       // THANKYOU: https://stackoverflow.com/a/52271526
-      
-      var mroot = gltf.scene;
-      var bbox = new THREE.Box3().setFromObject(mroot);
-      var size = bbox.getSize(new THREE.Vector3());
-
-      //Rescale the object to it's normalised height
-
-      var reported_height_m = size.y;
-
+  
       var SFmodel = model_height_m / reported_height_m;
 
       var SFdesired = height_m / model_height_m;
@@ -112,22 +60,92 @@
       return SFall;
     }
 
-    function positionAndScale(component, scale, alt_m){
+    function getBoundingBox(meshes){
+      var boundingBox = new THREE.Box3();
+      component.meshes.forEach(function(mesh){
+          box = new THREE.Box3().setFromObject(mesh);
+          boundingBox.union(box);
+      });
+      return boundingBox;
+    }
 
 
-      // THANK YOU: https://stackoverflow.com/questions/64218715/how-do-i-rotate-a-mesh-group-about-the-axis-of-a-random-3d-object-mesh-3d-line-w
-      function doTransform(mesh, axis, axisPosition, scale, alt_m) {
-        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-axisPosition.x, mesh.position.y-axisPosition.y, mesh.position.z-axisPosition.z));  //translate geometry to axis location
-        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeScale(scale, scale, scale)); 
-        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(axisPosition.x-mesh.position.x, axisPosition.y-mesh.position.y + alt_m, axisPosition.z-mesh.position.z));  //translate geometry back to original location
+
+    function beginTransforms(component){
+      component.readyForTicks = false;
+      component.center = null;
+      component.meshes = [];
+      component.parent = component.el.getObject3D('mesh');
+;
+  
+
+      // store meshes, so they are not retraversed on each tick
+      var meshes = component.meshes;
+      var parent = component.parent;
+      if (!!parent) { 
+        parent.traverse(function (node) {
+          if (node.isMesh) {
+            meshes.push(node);
+          }
+        });
       }
 
+      if(meshes.length > 0){
+          var boundingBox = getBoundingBox(meshes);
+          component.center = boundingBox.getCenter();
+          var size = boundingBox.getSize(new THREE.Vector3());
+          component.reported_height_m = size.y;
+      }
+
+    }
+
+
+
+
+
+
+    function positionAndScale(component, scale, alt_m){
+      
+
+      function moveCenterToOrigin(mesh, center){
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(mesh.position.x-center.x, mesh.position.y-center.y, mesh.position.z-center.z));  
+      }
+
+      function doScale(mesh, scale) {
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeScale(scale, scale, scale));  
+      }
+
+      function positionVertical(mesh, y_m){
+        mesh.geometry.applyMatrix4(new THREE.Matrix4().makeTranslation(0, y_m, 0));  
+      }
+      
+      component.meshes.forEach(function(mesh){
+        moveCenterToOrigin(mesh, component.center);
+      });
 
       component.meshes.forEach(function(mesh){
-        doTransform(mesh, new THREE.Vector3(0,1,0), component.center, scale, alt_m); 
+        doScale(mesh, scale ); 
       });
-      
+
+      var bb = getBoundingBox(component.meshes);
+      var height = bb.getSize(new THREE.Vector3()).y;
+      var center = bb.getCenter();
+
+      component.meshes.forEach(function(mesh){
+        moveCenterToOrigin(mesh, center); 
+      });
+
+      component.meshes.forEach(function(mesh){
+        positionVertical(mesh, (height / 2) + alt_m); 
+      });
+
+      component.center = center; 
+
+
     }
+
+
+
 
     function beginRotation(component, period_s, sectorsperrev){
         let tickTime_ms = period_s / sectorsperrev * 1000;
@@ -168,16 +186,13 @@
       var gltf = {
         scene: event.detail.model
       };
-
       // gathers transform data and stores it in the component
       beginTransforms(component);
 
       var scale = 1.0;
       if((!isNaN(model_height_m) && model_height_m != 0)){
-        scale = findScaleFactor(gltf, height_m, model_height_m);
+        scale = findScaleFactor( height_m, model_height_m, component.reported_height_m);
       }
-
-
 
       // applies transforms for position and scale
       positionAndScale(component, scale, alt_m);
@@ -259,7 +274,9 @@
       id="model"
       gltf-model="#model-asset"
       opacitychanger
-      spatialchanger>
+      spatialchanger
+      >
+
     </a-entity>
     </a-entity>
 
